@@ -16,6 +16,16 @@ import urllib.request
 BASE = (sys.argv[1] if len(sys.argv) > 1 else 'http://127.0.0.1:4183').rstrip('/')
 
 
+def media_type(header):
+    """Strip parameters from a Content-Type header.
+
+    GitHub Pages appends "; charset=utf-8" where `python3 -m http.server` does not.
+    Comparing raw headers made this check pass locally and fail in production,
+    which is the wrong way round: the check was testing the test server.
+    """
+    return (header or '').split(';')[0].strip().lower()
+
+
 def get(path):
     try:
         with urllib.request.urlopen(BASE + path, timeout=10) as r:
@@ -58,7 +68,7 @@ for page in pages:
         if code != 200:
             bad.append((f'{page} -> {url}', code))
         # A stylesheet served as text/plain is a silent, invisible failure.
-        if url.endswith('.css') and content_type and 'css' not in content_type:
+        if url.endswith('.css') and media_type(content_type) != 'text/css':
             bad.append((f'{page} -> {url}', f'wrong content-type {content_type}'))
 
 print(f'crawled {len(seen)} local URLs over HTTP')
@@ -82,7 +92,7 @@ ENDPOINTS = [
 fails = 0
 for path in ENDPOINTS:
     status, content_type, body = get(path)
-    good = status == 200 and content_type == 'application/json'
+    good = status == 200 and media_type(content_type) == 'application/json'
     try:
         json.loads(body)
     except Exception:  # noqa: BLE001
